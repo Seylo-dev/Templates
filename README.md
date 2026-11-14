@@ -48,8 +48,8 @@ a template creates before it creates them.
 
 `panel.json` names the [Seylo-dev/App](https://github.com/Seylo-dev/App)
 version the check runs: `check` for every check and `oldest` for the oldest
-panel the catalog supports. Until Seylo 0.2.17 is released both name the
-App commit that added the check; at that release they become `v0.2.17`.
+panel the catalog supports. Until Seylo 0.2.17 is released both name an
+App commit with the check; at that release they become `v0.2.17`.
 
 ## License
 

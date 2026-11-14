@@ -110,9 +110,11 @@ work ahead of a release, an App commit.
   `minPanel` is newer than `oldest` are left out of the `oldest` check,
   which is what makes `minPanel` honest.
 
-Until Seylo 0.2.17 is released, both name the App commit that added
-`check-templates.ts` (`9b9cad76`), which CI can fetch once that commit is
-pushed to Seylo-dev/App. At the release, set both to `v0.2.17`.
+Until Seylo 0.2.17 is released, both name an App commit with the current
+`check-templates.ts` (`a359d7c7`). CI and `bun run check` fetch that exact
+commit from Seylo-dev/App, so push it there before this repository, and
+never squash, rebase or amend it away afterwards: a commit GitHub no
+longer has fails every check. At the release, set both to `v0.2.17`.
 
 Set "Templates (panel.json check)", "Templates (panel.json oldest)",
 "Catalog (build and sign with a throwaway key)" and "Workflows (zizmor)"
