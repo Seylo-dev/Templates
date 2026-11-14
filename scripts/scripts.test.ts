@@ -105,16 +105,21 @@ describe("panel.json and TODOs", () => {
 
   test("a TODO is reported with its line, as a GitHub annotation under Actions", () => {
     const dir = repo({ "templates/a/meta.yaml": `${meta}body: "TODO: write this"\n`, "templates/a/index.ts": code });
-    expect(todoProblems(["a"], dir)).toEqual([
-      "templates/a/meta.yaml:5: A TODO from the example is still here: fill it in, then remove the TODO.",
-    ]);
-    process.env.GITHUB_ACTIONS = "true";
+    // GitHub's runners set GITHUB_ACTIONS for every step, this test's too: clear it for the plain case
+    // and put back whatever was there.
+    const before = process.env.GITHUB_ACTIONS;
     try {
+      delete process.env.GITHUB_ACTIONS;
+      expect(todoProblems(["a"], dir)).toEqual([
+        "templates/a/meta.yaml:5: A TODO from the example is still here: fill it in, then remove the TODO.",
+      ]);
+      process.env.GITHUB_ACTIONS = "true";
       expect(todoProblems(["a"], dir)[0]).toBe(
         "::error file=templates/a/meta.yaml,line=5::A TODO from the example is still here: fill it in, then remove the TODO.",
       );
     } finally {
-      delete process.env.GITHUB_ACTIONS;
+      if (before === undefined) delete process.env.GITHUB_ACTIONS;
+      else process.env.GITHUB_ACTIONS = before;
     }
   });
 });
