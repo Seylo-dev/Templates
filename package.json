@@ -1,0 +1,12 @@
+{
+  "name": "seylo-templates",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "new": "bun scripts/new.ts",
+    "check": "bun scripts/check.ts",
+    "build": "bun scripts/build-catalog.ts",
+    "test": "bun test scripts"
+  }
+}

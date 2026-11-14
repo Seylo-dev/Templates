@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A problem with Seylo itself
+    url: https://github.com/Seylo-dev/App/issues
+    about: The panel, the agent, the installer or the Templates page.
+  - name: Documentation
+    url: https://docs.seylo.dev
+    about: How to use templates on your panel.

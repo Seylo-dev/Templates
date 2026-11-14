@@ -1,0 +1,140 @@
+name: Publish
+
+# Every push to main publishes the signed catalog Seylo panels download:
+#
+#   https://github.com/Seylo-dev/Templates/releases/download/catalog/catalog.json
+#   https://github.com/Seylo-dev/Templates/releases/download/catalog/catalog.json.minisig
+#
+# in two jobs:
+#
+# - Build: checks every template (the check pull requests run) and writes
+#   catalog.json (scripts/build-catalog.ts). It runs bun and the App's code,
+#   so its token only reads and it gets no secret. It hands the catalog to
+#   the next job as an artifact.
+# - Sign: the only job that sees the catalog key (MINISIGN_SECRET_KEY and
+#   MINISIGN_PASSWORD of the "catalog" environment, which only main can
+#   deploy to). It runs no bun or npm: scripts/ci/sign-catalog.sh checks
+#   that the catalog holds exactly this commit's templates, byte for byte,
+#   signs it, verifies the signature with catalog.pub and uploads both files
+#   to the rolling "catalog" release, refusing a lower sequence than the
+#   published one. Without the key it publishes nothing and says so.
+#
+# One run at a time, never cancelled; a run still waiting is replaced by a
+# newer one, so the newest commit's catalog is the one left published.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the catalog's sequence is the commit count
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Check every template and build catalog.json
+        run: bun scripts/build-catalog.ts --out "$RUNNER_TEMP/catalog/catalog.json"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: catalog
+          path: ${{ runner.temp }}/catalog/catalog.json
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    name: Sign and publish
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # MINISIGN_SECRET_KEY and MINISIGN_PASSWORD live in this environment
+    # only, with main as its only deployment branch (CONTRIBUTING.md,
+    # "Signing key"). No other job can read them.
+    environment: catalog
+    permissions:
+      contents: write # the catalog release
+    steps:
+      # This commit's templates, scripts and catalog.pub; nothing is built or
+      # installed from it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # HEAD's commit count is the sequence the catalog must carry
+          persist-credentials: false
+
+      - name: Catalog key is set
+        id: key
+        env:
+          KEY_SET: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
+        run: |
+          if [ "$KEY_SET" = true ]; then
+            echo "set=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Catalog not published::the catalog environment has no MINISIGN_SECRET_KEY secret (CONTRIBUTING.md, \"Signing key\")"
+            echo "set=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "### Catalog not published"
+              echo
+              echo "The Build job checked every template and built catalog.json (the \`catalog\` artifact), but the \`catalog\` environment has no MINISIGN_SECRET_KEY, so nothing was signed or published. CONTRIBUTING.md, \"Signing key\", says how to set it up."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Only minisign (jq and gh come with the runner image): no npm or bun
+      # runs in this job.
+      - name: Signing tools
+        if: steps.key.outputs.set == 'true'
+        run: scripts/ci/install-minisign.sh
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.key.outputs.set == 'true'
+        with:
+          name: catalog
+          path: ${{ runner.temp }}/catalog
+
+      - name: Signing key
+        if: steps.key.outputs.set == 'true'
+        env:
+          CATALOG_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$CATALOG_KEY" | tr -d '\r' >"$RUNNER_TEMP/catalog.key"
+
+      - name: Check and sign catalog.json
+        if: steps.key.outputs.set == 'true'
+        env:
+          MINISIGN_SECRET_KEY: ${{ runner.temp }}/catalog.key
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: scripts/ci/sign-catalog.sh sign "$RUNNER_TEMP/catalog"
+
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/catalog.key"
+
+      - name: Publish to the catalog release
+        if: steps.key.outputs.set == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          scripts/ci/sign-catalog.sh upload "$RUNNER_TEMP/catalog" | tee "$RUNNER_TEMP/publish.log"
+          {
+            echo "### Catalog published"
+            echo
+            sed 's/^sign-catalog: /- /' "$RUNNER_TEMP/publish.log"
+          } >>"$GITHUB_STEP_SUMMARY"

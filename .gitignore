@@ -1,0 +1,8 @@
+# The App checkouts the check runs from (scripts/lib.ts).
+.cache/
+# What `bun run build` writes.
+/catalog.json
+/catalog.json.minisig
+node_modules/
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,35 @@
+name: Request a template
+description: An app you would like to install in one click.
+title: "Template: "
+labels: ["template request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the open issues first: someone may have asked already. Writing it yourself is often quick: see CONTRIBUTING.md.
+  - type: input
+    id: app
+    attributes:
+      label: App
+      description: Its name and website.
+      placeholder: Wiki.js, https://js.wiki
+    validations:
+      required: true
+  - type: input
+    id: image
+    attributes:
+      label: Docker image
+      description: The app's own image, if you know it.
+      placeholder: ghcr.io/requarks/wiki
+  - type: textarea
+    id: setup
+    attributes:
+      label: How it is run
+      description: A link to the app's Docker or docker compose instructions, and the database it needs (Postgres, MySQL, Redis, none).
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Anything else
+      description: What you would use it for, settings the install form should ask for.

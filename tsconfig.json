@@ -1,0 +1,14 @@
+{
+  "//": "Editor types for the templates only: ~templates-utils comes from types/. The scripts run on Bun.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["templates/*/index.ts", "example/index.ts", "types/templates-utils.d.ts"]
+}

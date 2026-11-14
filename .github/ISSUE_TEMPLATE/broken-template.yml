@@ -1,0 +1,32 @@
+name: A template does not work
+description: It fails to install, or the app does not start or work after installing.
+labels: ["broken template"]
+body:
+  - type: input
+    id: template
+    attributes:
+      label: Template
+      placeholder: n8n
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Seylo version
+      description: Settings > Updates shows it.
+      placeholder: 0.2.17
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The deploy log or the service's log, if there is one. Remove passwords and keys first.
+      render: text

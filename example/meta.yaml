@@ -1,0 +1,43 @@
+# Copied from example/ by `bun run new`. Fill in each line marked as a todo
+# (the check fails while one is left) and delete the comments you do not
+# need. Every key is described in templates/README.md.
+
+name: "Example"
+description: "TODO: One line for the card, at most 140 characters."
+# TODO: one of Analytics, Automation, CMS, Communication, Databases, Developer tools,
+# Marketing, Monitoring, Other, Productivity, Search, Security, Storage.
+category: "Other"
+tags: ["example"] # TODO: a few lower-case words people would search for
+creates: "App + Postgres" # TODO: what the install creates, shown on the card
+links: # https only
+  - label: "Website"
+    url: "https://example.com" # TODO
+  - label: "Docs"
+    url: "https://example.com/docs" # TODO
+# minPanel: "0.2.17"  # the oldest Seylo that can run this template; leave it out unless it needs a newer feature
+body: |
+  TODO: Markdown shown in the install dialog. Say what the install creates,
+  what to do after the first deploy (create the admin account, finish a
+  setup page) and anything that is easy to get wrong.
+schema: # the install form; the panel asks for the service name and the node itself
+  type: object
+  required: ["image"]
+  properties:
+    image:
+      type: "string"
+      title: "Image"
+      description: "Docker image and tag to run."
+      default: "example/app:1.0.0" # TODO: the app's own image, pinned to a version (never latest)
+    adminEmail:
+      type: "string"
+      title: "Admin email"
+      description: "The first admin account."
+    adminPassword:
+      type: "string"
+      format: "password" # left empty, the panel generates one
+      title: "Admin password"
+    logLevel:
+      type: "string"
+      title: "Log level"
+      enum: ["info", "debug", "warn"] # a select
+      default: "info"

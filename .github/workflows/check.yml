@@ -1,0 +1,96 @@
+name: Check
+
+# Every pull request and every push to main. Checks only: nothing here
+# publishes, the token can only read and no job gets a secret, so pull
+# requests from forks run it safely.
+#
+# - Templates: `bun run check` (scripts/check.ts), the panel's own check
+#   from the Seylo-dev/App ref in panel.json, once against "check" and once
+#   against "oldest" (templates whose minPanel is newer are left out there).
+# - Catalog: the scripts' tests, then the catalog built and signed the way
+#   the Publish workflow does it, with a throwaway key made in the job.
+# - Workflows: zizmor.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  templates:
+    name: Templates (panel.json ${{ matrix.against }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        against: [check, oldest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Bun the App builds with; keep it in step with Seylo-dev/App's workflows.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: bun run check --against ${{ matrix.against }}
+        env:
+          AGAINST: ${{ matrix.against }}
+        run: bun scripts/check.ts --against "$AGAINST"
+
+  catalog:
+    name: Catalog (build and sign with a throwaway key)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the catalog's sequence is the commit count
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - name: Signing tools
+        run: scripts/ci/install-minisign.sh
+
+      - name: Script tests
+        run: bun test scripts
+
+      - name: Build catalog.json
+        run: bun scripts/build-catalog.ts --out "$RUNNER_TEMP/catalog/catalog.json"
+
+      - name: Sign it as the Publish workflow does, with a throwaway key
+        run: |
+          key_dir=$(mktemp -d)
+          minisign -G -W -p "$key_dir/catalog.pub" -s "$key_dir/catalog.key" >/dev/null
+          CATALOG_PUBLIC_KEY=$(sed -n 2p "$key_dir/catalog.pub") \
+            MINISIGN_SECRET_KEY="$key_dir/catalog.key" MINISIGN_PASSWORD="" \
+            scripts/ci/sign-catalog.sh sign "$RUNNER_TEMP/catalog"
+          rm -rf "$key_dir"
+
+  workflows:
+    name: Workflows (zizmor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: zizmorcore/zizmor-action@85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e # v0.7.1
+        with:
+          version: 1.31.1
+          advanced-security: false # fail the job on findings instead of uploading SARIF
+          min-severity: medium

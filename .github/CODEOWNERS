@@ -1,0 +1,9 @@
+# A template pull request can be approved by any maintainer. What decides
+# how the catalog is checked, built, signed and published needs the owner.
+/.github/       @ShiNxz
+/scripts/       @ShiNxz
+/panel.json     @ShiNxz
+/catalog.pub    @ShiNxz
+/package.json   @ShiNxz
+/LICENSE        @ShiNxz
+/LICENSE.*      @ShiNxz
