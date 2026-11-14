@@ -15,9 +15,11 @@ name: Publish
 #   MINISIGN_PASSWORD of the "catalog" environment, which only main can
 #   deploy to). It runs no bun or npm: scripts/ci/sign-catalog.sh checks
 #   that the catalog holds exactly this commit's templates, byte for byte,
-#   signs it, verifies the signature with catalog.pub and uploads both files
-#   to the rolling "catalog" release, refusing a lower sequence than the
-#   published one. Without the key it publishes nothing and says so.
+#   with only format 1's keys and meta.yaml's name, category and the other
+#   copies the website shows, signs it, verifies the signature with
+#   catalog.pub and uploads both files to the rolling "catalog" release,
+#   refusing a lower sequence than the published one. Without the key it
+#   publishes nothing and says so.
 #
 # One run at a time, never cancelled; a run still waiting is replaced by a
 # newer one, so the newest commit's catalog is the one left published.
@@ -96,7 +98,7 @@ jobs:
             } >>"$GITHUB_STEP_SUMMARY"
           fi
 
-      # Only minisign (jq and gh come with the runner image): no npm or bun
+      # Only minisign (jq, yq and gh come with the runner image): no npm or bun
       # runs in this job.
       - name: Signing tools
         if: steps.key.outputs.set == 'true'

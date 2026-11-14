@@ -123,7 +123,9 @@ Publishing).
 
 `.github/workflows/publish.yml` runs on every push to `main`: the Build job
 checks every template and builds `catalog.json`; the Sign job checks that
-the catalog holds exactly that commit's templates, signs it and replaces
+the catalog holds exactly that commit's templates (and that the name,
+category and other fields copied next to each slug, which the website
+shows, are its `meta.yaml`'s), signs it and replaces
 `catalog.json` and `catalog.json.minisig` on the `catalog` release.
 
 - The catalog's sequence is `main`'s commit count, and panels refuse a

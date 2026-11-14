@@ -193,9 +193,12 @@ test("bun run build refuses a shallow clone, whose commit count is not the seque
 
 // ---- scripts/ci/sign-catalog.sh ---------------------------------------------
 
-// CI installs minisign before the tests (scripts/ci/install-minisign.sh).
-if (Bun.which("minisign") === null || Bun.which("jq") === null)
-  test.skip("sign-catalog.sh (needs minisign and jq)", () => {});
+// CI installs minisign before the tests (scripts/ci/install-minisign.sh); jq and yq come with the runner image.
+const yamlReader =
+  (Bun.which("yq") !== null && sh(["yq", "--version"], repoRoot).out.includes("mikefarah")) ||
+  sh(["python3", "-E", "-c", "import yaml"], tmpdir()).code === 0;
+if (Bun.which("minisign") === null || Bun.which("jq") === null || !yamlReader)
+  test.skip("sign-catalog.sh (needs minisign, jq, and yq or python3 with PyYAML)", () => {});
 else
 describe("sign-catalog.sh", () => {
   const sha256 = (bytes: string | Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -204,7 +207,7 @@ describe("sign-catalog.sh", () => {
     "templates/a/meta.yaml": meta,
     "templates/a/index.ts": code,
     "templates/a/logo.webp": logo,
-    "templates/b/meta.yaml": meta.replace('"A"', '"B"'),
+    "templates/b/meta.yaml": `${meta.replace('"A"', '"B"')}tags: ["x", "y"]\nminPanel: "0.2.17"\n`,
     "templates/b/index.ts": code,
     "templates/README.md": "Not a template.\n",
     NOTICE: "Logos\n  templates/a/logo.webp   drawn for this test\n",
@@ -224,6 +227,12 @@ describe("sign-catalog.sh", () => {
     return { secret: `${dir}/catalog.key`, pub: readFileSync(`${dir}/catalog.pub`, "utf8").split("\n")[1] as string, pubFile: readFileSync(`${dir}/catalog.pub`, "utf8") };
   }
 
+  /** check-templates.ts --emit's copies of each meta.yaml in repoFiles. */
+  const copies = {
+    a: { minPanel: null, name: "A", description: "A test.", category: "Other", creates: "App", tags: [] },
+    b: { minPanel: "0.2.17", name: "B", description: "A test.", category: "Other", creates: "App", tags: ["x", "y"] },
+  };
+
   /** The catalog check-templates.ts --emit would write for `dir`'s HEAD, changed by `edit`. */
   function catalog(dir: string, edit: (c: any) => void = () => {}) {
     const file = (path: string) => new Uint8Array(readFileSync(join(dir, path)));
@@ -234,12 +243,12 @@ describe("sign-catalog.sh", () => {
       source: "Seylo-dev/Templates",
       commit: git(dir, "rev-parse", "HEAD"),
       sequence: Number(git(dir, "rev-list", "--count", "HEAD")),
-      generatedAt: "2026-11-14T00:00:00.000Z",
+      generatedAt: new Date().toISOString(),
       notice: readFileSync(join(dir, "NOTICE"), "utf8"),
       licenses: { "LICENSE.icons": readFileSync(join(dir, "LICENSE.icons"), "utf8") },
       templates: [
-        { slug: "a", files: Object.fromEntries(["index.ts", "logo.webp", "meta.yaml"].map((n) => [n, entry(n, file(`templates/a/${n}`))])) },
-        { slug: "b", files: Object.fromEntries(["index.ts", "meta.yaml"].map((n) => [n, entry(n, file(`templates/b/${n}`))])) },
+        { slug: "a", ...copies.a, files: Object.fromEntries(["index.ts", "logo.webp", "meta.yaml"].map((n) => [n, entry(n, file(`templates/a/${n}`))])) },
+        { slug: "b", ...copies.b, files: Object.fromEntries(["index.ts", "meta.yaml"].map((n) => [n, entry(n, file(`templates/b/${n}`))])) },
       ],
     };
     edit(value);
@@ -288,6 +297,20 @@ describe("sign-catalog.sh", () => {
       ["the catalog's sequence is 7, not HEAD's commit count (1)", (c) => (c.sequence = 7)],
       ["the catalog's source is someone/Templates", (c) => (c.source = "someone/Templates")],
       ["the catalog has format 2, not 1", (c) => (c.format = 2)],
+      // The copies the website shows, and anything format 1 does not have.
+      ['templates/a: the catalog\'s name, description, category, creates, tags and minPanel are {"category":"Other","creates":"App","description":"A test.","minPanel":null,"name":"Evil name","tags":[]}, not meta.yaml\'s {"category":"Other","creates":"App","description":"A test.","minPanel":null,"name":"A","tags":[]}', (c) => (c.templates[0].name = "Evil name")],
+      ["templates/b: the catalog's name, description, category, creates, tags and minPanel are", (c) => (c.templates[1].tags = ["x"])],
+      ["templates/b: the catalog's name, description, category, creates, tags and minPanel are", (c) => (c.templates[1].minPanel = null)],
+      ["templates/a: the catalog's name, description, category, creates, tags and minPanel are", (c) => (c.templates[0].category = "Security")],
+      ["templates/a: the catalog's name, description, category, creates, tags and minPanel are", (c) => delete c.templates[0].tags],
+      ["the catalog has keys format 1 does not: extra", (c) => (c.extra = { homepage: "https://example.com" })],
+      ["keys format 1 does not have: templates/b has homepage", (c) => (c.templates[1].homepage = "https://example.com")],
+      ["templates/a/index.ts in the catalog is not {sha256, text}", (c) => (c.templates[0].files["index.ts"].note = "x")],
+      ["templates/a/logo.webp in the catalog is not {sha256, text}", (c) => (c.templates[0].files["logo.webp"].text = "x")],
+      ["a template in the catalog is not an object with a slug and files", (c) => c.templates.push("c")],
+      ["the catalog's generatedAt (2099-01-01T00:00:00.000Z) is not between HEAD's commit time and now", (c) => (c.generatedAt = "2099-01-01T00:00:00.000Z")],
+      ["the catalog's generatedAt (2001-01-01T00:00:00.000Z) is not between HEAD's commit time and now", (c) => (c.generatedAt = "2001-01-01T00:00:00.000Z")],
+      ["the catalog's generatedAt (yesterday) is not a time", (c) => (c.generatedAt = "yesterday")],
     ];
     for (const [message, edit] of cases) {
       const out = catalog(signed, edit);

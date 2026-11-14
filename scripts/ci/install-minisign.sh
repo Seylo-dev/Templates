@@ -2,8 +2,8 @@
 # minisign for the Check and Publish workflows, from its own GitHub release
 # instead of apt (a copy of Seylo-dev/App scripts/ci/install-minisign.sh:
 # on 2026-11-11 Ubuntu's mirror stopped resolving on GitHub's runners and
-# apt installs failed). jq, which scripts/ci/sign-catalog.sh also needs,
-# comes with the runner image (ubuntu-24.04).
+# apt installs failed). jq and yq, which scripts/ci/sign-catalog.sh also
+# needs, come with the runner image (ubuntu-24.04).
 #
 # The tarball is pinned by its sha256. When the pin was taken its .minisig
 # verified against the minisign author's key

@@ -3,14 +3,21 @@
 # .github/workflows/publish.yml this runs in the Sign job, the only job that
 # sees the catalog key. It gets catalog.json from the Build job (which ran
 # bun and the App's check code) and runs none of that code: only git, jq,
-# sha256sum, base64, cmp, minisign and gh.
+# sha256sum, base64, cmp, minisign, gh, and yq (mikefarah's, on GitHub's
+# runner images) to read meta.yaml, or python3 with PyYAML where there is
+# no yq.
 #
 #   scripts/ci/sign-catalog.sh sign <dir>
 #     Signs <dir>/catalog.json into <dir>/catalog.json.minisig, only when:
 #       - it is format 1 from Seylo-dev/Templates, built from this checkout's
-#         HEAD, and its sequence is HEAD's commit count;
+#         HEAD, its sequence is HEAD's commit count, and its generatedAt is
+#         between HEAD's commit time and now;
+#       - it has only format 1's keys, at the top, per template and per file;
 #       - its templates are exactly HEAD's folders under templates/, each
 #         with exactly their files, byte for byte, and every sha256 is right;
+#       - the copies next to each slug (name, description, category,
+#         creates, tags, minPanel: the website shows them) are its
+#         meta.yaml's, as check-templates.ts --emit writes them;
 #       - its notice is NOTICE and its licenses are the LICENSE.* files.
 #     So whatever ran in the Build job, the signed catalog holds this
 #     commit's templates and nothing else. The trusted comment is
@@ -87,8 +94,28 @@ entry_file() {
   esac
 }
 
+# meta.yaml as JSON: mikefarah's yq where there is one (GitHub's runner
+# images), else python3 with PyYAML, run from $tmp so nothing in the
+# checkout is imported.
+yaml_tool=""
+yaml_json() {
+  if [ "$yaml_tool" = yq ]; then
+    yq -o=json '.' "$1"
+  else
+    (cd "$tmp" && python3 -E -c 'import json, sys, yaml; json.dump(yaml.safe_load(open(sys.argv[1], encoding="utf-8")), sys.stdout, default=str)' "$1")
+  fi
+}
+
 check_catalog() {
-  local got slug file name count=0
+  local got want slug file name count=0 generated committed now
+  if command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -q mikefarah; then
+    yaml_tool=yq
+  elif (cd "$tmp" && python3 -E -c 'import yaml') >/dev/null 2>&1; then
+    yaml_tool=python3
+  else
+    die "reading meta.yaml needs yq (github.com/mikefarah/yq, on GitHub's runner images) or python3 with PyYAML"
+  fi
+
   got=$(field .format)
   [ "$got" = 1 ] || die "the catalog has format $got, not 1"
   got=$(field .source)
@@ -99,6 +126,31 @@ check_catalog() {
   [ "$got" = "$sequence" ] || die "the catalog's sequence is $got, not HEAD's commit count ($sequence)"
   jq -e '(.generatedAt | type) == "string" and (.notice | type) == "string" and (.licenses | type) == "object" and (.templates | type) == "array"' \
     "$cat" >/dev/null || die "the catalog lacks generatedAt, notice, licenses or templates"
+  jq -e '.templates | all(type == "object" and (.slug | type) == "string" and (.files | type) == "object" and (.files | all(type == "object")))' \
+    "$cat" >/dev/null || die "a template in the catalog is not an object with a slug and files"
+
+  # Only format 1's keys: nothing the Build job added rides along under the signature.
+  got=$(jq -r '[keys[] | select(IN("format", "source", "commit", "sequence", "generatedAt", "notice", "licenses", "templates") | not)] | join(", ")' "$cat")
+  [ -z "$got" ] || die "the catalog has keys format 1 does not: $got"
+  got=$(jq -r '[.templates[] | .slug as $s
+    | [keys[] | select(IN("slug", "minPanel", "name", "description", "category", "creates", "tags", "files") | not)]
+    | select(length > 0) | "templates/\($s) has \(join(", "))"] | .[0] // empty' "$cat")
+  [ -z "$got" ] || die "keys format 1 does not have: $got"
+  got=$(jq -r '[.templates[] | .slug as $s | .files | to_entries[]
+    | select((.value | keys) != (if .key == "meta.yaml" or .key == "index.ts" then ["sha256", "text"] else ["base64", "sha256"] end))
+    | "templates/\($s)/\(.key)"] | .[0] // empty' "$cat")
+  [ -z "$got" ] || die "$got in the catalog is not {sha256, text} (meta.yaml, index.ts) or {sha256, base64} (a logo)"
+
+  # Built after HEAD was committed, and not in the future (a few minutes either way for clocks).
+  got=$(field .generatedAt)
+  [[ $got =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$ ]] ||
+    die "the catalog's generatedAt ($got) is not a time such as 2026-11-14T10:00:00.000Z"
+  generated=$(jq -r '.generatedAt | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601' "$cat")
+  committed=$(repo_git log -1 --format=%ct HEAD)
+  now=$(date +%s)
+  if [ "$generated" -lt $((committed - 600)) ] || [ "$generated" -gt $((now + 600)) ]; then
+    die "the catalog's generatedAt ($got) is not between HEAD's commit time and now"
+  fi
 
   # The same templates as HEAD's folders under templates/.
   repo_git ls-tree -d --name-only HEAD templates/ | sed 's#^templates/##' | LC_ALL=C sort >"$tmp/repo-slugs"
@@ -120,6 +172,15 @@ check_catalog() {
       got=$(jq -r --arg s "$slug" --arg f "$file" '.templates[] | select(.slug == $s) | .files[$f].sha256' "$cat")
       [ "$got" = "$(sha256 <"$tmp/head")" ] || die "templates/$slug/$file: the catalog's sha256 for it is wrong"
     done <"$tmp/repo-files"
+
+    # The copies next to the slug, with check-templates.ts --emit's defaults for a missing field.
+    repo_git cat-file blob "HEAD:templates/$slug/meta.yaml" >"$tmp/meta.yaml" 2>/dev/null || die "templates/$slug has no meta.yaml in HEAD"
+    want=$(yaml_json "$tmp/meta.yaml" | jq -S -c --arg s "$slug" '(. // {}) | {minPanel: (.minPanel // null), name: (.name // $s),
+      description: (.description // ""), category: (.category // "Other"), creates: (.creates // ""), tags: (.tags // [])}') ||
+      die "templates/$slug/meta.yaml: $yaml_tool could not read it"
+    got=$(jq -S -c --arg s "$slug" '.templates[] | select(.slug == $s) | {minPanel, name, description, category, creates, tags}' "$cat")
+    [ "$got" = "$want" ] ||
+      die "templates/$slug: the catalog's name, description, category, creates, tags and minPanel are $got, not meta.yaml's $want"
     count=$((count + 1))
   done <"$tmp/repo-slugs"
 
