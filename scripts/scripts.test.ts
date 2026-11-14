@@ -321,7 +321,7 @@ describe("sign-catalog.sh", () => {
     }
   });
 
-  test("refuses another key than catalog.pub's, a wrong password and a placeholder catalog.pub", () => {
+  test("refuses another key than catalog.pub's, a wrong password, and a placeholder or garbled catalog.pub", () => {
     const other = keypair();
     expect(sign(catalog(signed), { MINISIGN_SECRET_KEY: other.secret }).out).toContain("MINISIGN_SECRET_KEY is another key");
 
@@ -331,12 +331,34 @@ describe("sign-catalog.sh", () => {
     expect(sign(catalog(lockedRepo), { ...env, MINISIGN_PASSWORD: "wrong" }, lockedRepo).out).toContain("wrong MINISIGN_PASSWORD?");
     expect(sign(catalog(lockedRepo), { ...env, MINISIGN_PASSWORD: "hunter22hunter22" }, lockedRepo).code).toBe(0);
 
-    const placeholder = repo({ ...repoFiles, "catalog.pub": readFileSync(join(repoRoot, "catalog.pub"), "utf8") });
+    const placeholder = repo({ ...repoFiles, "catalog.pub": "untrusted comment: placeholder\nPLACEHOLDER_TEMPLATES_MINISIGN_PUBLIC_KEY\n" });
     const run = sign(catalog(placeholder), {}, placeholder);
     expect(run.code).toBe(1);
     expect(run.out).toContain("catalog.pub holds no key yet");
     // The dry run's throwaway key stands in for it.
     expect(sign(catalog(placeholder), { CATALOG_PUBLIC_KEY: key.pub }, placeholder).code).toBe(0);
+
+    const garbled = repo({ ...repoFiles, "catalog.pub": `untrusted comment: cut short\n${key.pub.slice(0, 40)}\n` });
+    expect(sign(catalog(garbled), {}, garbled).out).toContain("catalog.pub's second line is not a minisign public key");
+  });
+
+  test("this repository's catalog.pub is the Seylo release key and refuses any other secret key", () => {
+    const pubFile = readFileSync(join(repoRoot, "catalog.pub"), "utf8");
+    const [comment, pub] = pubFile.split("\n");
+    expect(comment).toStartWith("untrusted comment: Seylo release key");
+    expect(pub).toBe("RWTwvrETQsecIkFOCm1ceiZwfxVq6sFfiEmJfWnUVv7UBIn0jWm2h1ip");
+    // "Ed", then the key id the comment names (little-endian), then the 32-byte key.
+    const bytes = Buffer.from(pub as string, "base64");
+    expect(bytes.length).toBe(42);
+    expect(bytes.subarray(0, 2).toString()).toBe("Ed");
+    expect(comment).toContain(`minisign public key ${Buffer.from(bytes.subarray(2, 10)).reverse().toString("hex").toUpperCase()}`);
+
+    const released = repo({ ...repoFiles, "catalog.pub": pubFile });
+    const out = catalog(released);
+    const run = sign(out, {}, released);
+    expect(run.code).toBe(1);
+    expect(run.out).toContain("the signature does not verify with catalog.pub: MINISIGN_SECRET_KEY is another key");
+    expect(sh(["test", "-e", `${out}/catalog.json.minisig`], out).code).toBe(1);
   });
 
   describe("upload", () => {

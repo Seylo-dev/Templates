@@ -39,9 +39,10 @@ https://github.com/Seylo-dev/Templates/releases/download/catalog/catalog.json
 https://github.com/Seylo-dev/Templates/releases/download/catalog/catalog.json.minisig
 ```
 
-A panel takes a downloaded catalog only when the signature verifies with
-the catalog key built into it (the same key as [`catalog.pub`](catalog.pub)),
-every file matches its sha256, and its sequence number is not lower than
+The catalog is signed with the same minisign key as Seylo releases. A
+panel takes a downloaded catalog only when the signature verifies with the
+release key built into it (the key in [`catalog.pub`](catalog.pub)), every
+file matches its sha256, and its sequence number is not lower than
 one it already has; otherwise it keeps the catalog it has and shows why.
 Template code runs in the panel's sandbox, and the panel shows the services
 a template creates before it creates them.

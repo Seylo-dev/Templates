@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Checks, signs and publishes the template catalog. In
 # .github/workflows/publish.yml this runs in the Sign job, the only job that
-# sees the catalog key. It gets catalog.json from the Build job (which ran
-# bun and the App's check code) and runs none of that code: only git, jq,
-# sha256sum, base64, cmp, minisign, gh, and yq (mikefarah's, on GitHub's
-# runner images) to read meta.yaml, or python3 with PyYAML where there is
-# no yq.
+# sees the signing key: the Seylo release key, the same minisign key that
+# signs Seylo releases (catalog.pub is its public key). It gets catalog.json
+# from the Build job (which ran bun and the App's check code) and runs none
+# of that code: only git, jq, sha256sum, base64, cmp, minisign, gh, and yq
+# (mikefarah's, on GitHub's runner images) to read meta.yaml, or python3
+# with PyYAML where there is no yq.
 #
 #   scripts/ci/sign-catalog.sh sign <dir>
 #     Signs <dir>/catalog.json into <dir>/catalog.json.minisig, only when:
@@ -22,7 +23,8 @@
 #     So whatever ran in the Build job, the signed catalog holds this
 #     commit's templates and nothing else. The trusted comment is
 #     "seylo templates catalog seq=<sequence> commit=<commit>". The signature
-#     must verify with catalog.pub.
+#     must verify with catalog.pub, so a secret key that is not the release
+#     key is refused.
 #     Needs MINISIGN_SECRET_KEY (the key file) and MINISIGN_PASSWORD (may be
 #     empty). CATALOG_PUBLIC_KEY (the "RW..." key) stands in for catalog.pub,
 #     for the dry run's throwaway key.
@@ -75,6 +77,8 @@ key=${CATALOG_PUBLIC_KEY:-}
 case $key in
 "" | PLACEHOLDER_*) die "catalog.pub holds no key yet (CONTRIBUTING.md, \"Signing key\")" ;;
 esac
+# A minisign public key: base64 of "Ed", the key id and the 32-byte key.
+[[ $key =~ ^RW[A-Za-z0-9+/]{54}$ ]] || die "catalog.pub's second line is not a minisign public key (RW...)"
 
 # One field of the catalog as raw text.
 field() { jq -r "$1" "$cat"; }
@@ -200,7 +204,7 @@ check_catalog() {
   echo "sign-catalog: catalog.json holds HEAD's $count templates byte for byte (sequence $sequence, commit $commit)"
 }
 
-# minisign -V with the catalog key, and the trusted comment for this commit.
+# minisign -V with catalog.pub's key, and the trusted comment for this commit.
 verify() {
   local out
   out=$(minisign -V -P "$key" -m "$1" -x "$2" 2>&1) || return 1

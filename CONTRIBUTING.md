@@ -141,24 +141,30 @@ shows, are its `meta.yaml`'s), signs it and replaces
 
 ### Signing key
 
-The catalog has its own minisign key, separate from the key that signs
-Seylo releases: this repository publishes on every merge and takes outside
-pull requests, and a leaked catalog key can only ship templates
-(sandboxed, previewed before install), never binaries.
+The catalog is signed with the Seylo release key, the same minisign key
+that signs Seylo releases. `catalog.pub` is its public key (the
+`minisignPublicKey` in Seylo-dev/App `brand/brand.json`), and the Sign job
+refuses to publish a signature that does not verify with it. The secret
+key lives only in the `catalog` environment, which only `main` can deploy
+to and only the Sign job reads; that job runs no bun, npm or template
+code. What it runs is in `.github/` and `scripts/`, which need the owner's
+review (CODEOWNERS).
 
-1. `minisign -G -p catalog.pub -s catalog.key` (with a password).
-2. Commit `catalog.pub` here, replacing the placeholder.
-3. Put its key (the `RW...` line) into Seylo-dev/App `brand/brand.json` as
-   `templatesMinisignPublicKey` and run `make gen` there.
-4. Here, in Settings > Environments, create `catalog` with `main` as its
-   only deployment branch and the secrets `MINISIGN_SECRET_KEY` (the
-   contents of `catalog.key`) and `MINISIGN_PASSWORD`.
-5. Keep `catalog.key` offline; it is only needed again to set the secret.
+Setup is two secrets, nothing to generate or commit. In Settings >
+Environments:
 
-Until the secret exists, the Publish workflow builds and checks the
-catalog but publishes nothing, and says so in the run summary. Once it
-exists, Actions > Publish > Run workflow on `main` publishes the current
+1. Create `catalog` with `main` as its only deployment branch.
+2. Add the secrets `MINISIGN_SECRET_KEY` and `MINISIGN_PASSWORD`, the same
+   values as the `release` environment of Seylo-dev/App.
+
+Until the secrets exist, the Publish workflow builds and checks the
+catalog but publishes nothing, and says so in the run summary. Once they
+exist, Actions > Publish > Run workflow on `main` publishes the current
 catalog without waiting for the next merge.
+
+If the release key is ever replaced, put the new public key in
+`catalog.pub` before changing the secrets here: the Sign job refuses a
+secret key that does not match `catalog.pub`.
 
 ### License
 

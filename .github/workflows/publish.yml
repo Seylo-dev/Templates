@@ -11,9 +11,10 @@ name: Publish
 #   catalog.json (scripts/build-catalog.ts). It runs bun and the App's code,
 #   so its token only reads and it gets no secret. It hands the catalog to
 #   the next job as an artifact.
-# - Sign: the only job that sees the catalog key (MINISIGN_SECRET_KEY and
-#   MINISIGN_PASSWORD of the "catalog" environment, which only main can
-#   deploy to). It runs no bun or npm: scripts/ci/sign-catalog.sh checks
+# - Sign: the only job that sees the signing key, the Seylo release key
+#   (MINISIGN_SECRET_KEY and MINISIGN_PASSWORD of the "catalog" environment,
+#   the same values as Seylo-dev/App's "release" environment; only main can
+#   deploy to it). It runs no bun or npm: scripts/ci/sign-catalog.sh checks
 #   that the catalog holds exactly this commit's templates, byte for byte,
 #   with only format 1's keys and meta.yaml's name, category and the other
 #   copies the website shows, signs it, verifies the signature with
@@ -67,9 +68,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # MINISIGN_SECRET_KEY and MINISIGN_PASSWORD live in this environment
-    # only, with main as its only deployment branch (CONTRIBUTING.md,
-    # "Signing key"). No other job can read them.
+    # MINISIGN_SECRET_KEY and MINISIGN_PASSWORD (the Seylo release key) live
+    # in this environment only, with main as its only deployment branch
+    # (CONTRIBUTING.md, "Signing key"). No other job can read them.
     environment: catalog
     permissions:
       contents: write # the catalog release
@@ -81,7 +82,7 @@ jobs:
           fetch-depth: 0 # HEAD's commit count is the sequence the catalog must carry
           persist-credentials: false
 
-      - name: Catalog key is set
+      - name: Signing key is set
         id: key
         env:
           KEY_SET: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
@@ -113,21 +114,21 @@ jobs:
       - name: Signing key
         if: steps.key.outputs.set == 'true'
         env:
-          CATALOG_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          SIGNING_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: |
           umask 077
-          printf '%s\n' "$CATALOG_KEY" | tr -d '\r' >"$RUNNER_TEMP/catalog.key"
+          printf '%s\n' "$SIGNING_KEY" | tr -d '\r' >"$RUNNER_TEMP/minisign.key"
 
       - name: Check and sign catalog.json
         if: steps.key.outputs.set == 'true'
         env:
-          MINISIGN_SECRET_KEY: ${{ runner.temp }}/catalog.key
+          MINISIGN_SECRET_KEY: ${{ runner.temp }}/minisign.key
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: scripts/ci/sign-catalog.sh sign "$RUNNER_TEMP/catalog"
 
       - name: Remove the signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/catalog.key"
+        run: rm -f "$RUNNER_TEMP/minisign.key"
 
       - name: Publish to the catalog release
         if: steps.key.outputs.set == 'true'
