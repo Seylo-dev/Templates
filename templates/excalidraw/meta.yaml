@@ -9,7 +9,7 @@ links:
   - label: "Repository"
     url: "https://github.com/excalidraw/excalidraw"
 body: |
-  A static Excalidraw app. Drawings stay in each browser unless you export or share them. The project only publishes the `latest` tag.
+  A static Excalidraw app. Drawings stay in each browser unless you export or share them. The project only publishes the `latest` tag, so the image is pinned to the digest that tag had on 14 Nov 2026; put a newer digest here to update.
 schema:
   type: object
   required: ["image"]
@@ -17,5 +17,5 @@ schema:
     image:
       type: "string"
       title: "Image"
-      description: "Docker image and tag to run."
-      default: "excalidraw/excalidraw:latest"
+      description: "Docker image and tag (or digest) to run."
+      default: "excalidraw/excalidraw:latest@sha256:f7ee194addd607bf831d2af0f0a34463dd4225e426cf35199ef0b12a803398e9"
