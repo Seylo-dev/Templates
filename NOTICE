@@ -40,6 +40,9 @@ Template logos, served by the panel at /api/templates/<slug>/logo.<ext>:
   templates/uptime-kuma/logo.svg      svg/uptime-kuma.svg
   templates/vaultwarden/logo.svg      svg/vaultwarden.svg
 
+  templates/mailroom/logo.svg         Mailroom's own mark, from https://github.com/ShiNxz/Mailroom,
+                                      contributed with the template under the MIT License
+
 To add or update one: take the file from the same repository at a pinned
 commit (raw.githubusercontent.com/homarr-labs/dashboard-icons/<commit>/...),
 keep an SVG under 50 KB and a raster under 30 KB, list it here and update the
