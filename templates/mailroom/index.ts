@@ -20,6 +20,8 @@ export function generate(input: Input) {
     DATABASE_URL: ref(db, "INTERNAL_URL"),
     REDIS_URL: ref(redis, "INTERNAL_URL"),
     APP_SECRET: randomHex(32),
+    // The web app's address: passkeys are bound to it, and push notifications name it
+    PUBLIC_URL: ref(input.serviceName, "URL"),
   };
   return {
     services: [
@@ -31,8 +33,7 @@ export function generate(input: Input) {
         data: {
           serviceName: api,
           source: { type: "image", image: input.serverImage },
-          // PUBLIC_URL: passkeys are bound to the web app's address, and cross-site writes are refused
-          env: env({ ...shared, SETUP_TOKEN: input.setupToken, PUBLIC_URL: ref(input.serviceName, "URL"), PORT: 3001 }),
+          env: env({ ...shared, SETUP_TOKEN: input.setupToken, PORT: 3001 }),
           ports: [3001],
         },
       },
