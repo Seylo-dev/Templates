@@ -31,7 +31,8 @@ export function generate(input: Input) {
         data: {
           serviceName: api,
           source: { type: "image", image: input.serverImage },
-          env: env({ ...shared, SETUP_TOKEN: input.setupToken, PORT: 3001 }),
+          // PUBLIC_URL: passkeys are bound to the web app's address, and cross-site writes are refused
+          env: env({ ...shared, SETUP_TOKEN: input.setupToken, PUBLIC_URL: ref(input.serviceName, "URL"), PORT: 3001 }),
           ports: [3001],
         },
       },

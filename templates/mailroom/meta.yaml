@@ -23,11 +23,11 @@ schema:
       type: "string"
       title: "Server image"
       description: "Runs the API and the sync worker."
-      default: "ghcr.io/shinxz/mailroom-server:0.1.0"
+      default: "ghcr.io/shinxz/mailroom-server:0.2.0"
     webImage:
       type: "string"
       title: "Web image"
-      default: "ghcr.io/shinxz/mailroom-web:0.1.0"
+      default: "ghcr.io/shinxz/mailroom-web:0.2.0"
     setupToken:
       type: "string"
       format: "password"
